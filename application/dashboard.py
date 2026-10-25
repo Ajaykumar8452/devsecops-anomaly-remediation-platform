@@ -20,6 +20,17 @@ st.caption(
 # 1. Backend connection
 # --------------------------------------------------
 
+def get_metrics_history():
+    try:
+        response = requests.get(
+            f"{API_URL}/metrics/history",
+            timeout=5,
+        )
+        response.raise_for_status()
+        return response.json().get("samples", [])
+    except requests.RequestException:
+        return []
+
 def get_system_metrics():
     try:
         response = requests.get(
@@ -147,12 +158,19 @@ st.subheader("🚀 Submit a Processing Job")
 
 with st.form("job_form"):
     workload = st.selectbox(
-        "Workload Type",
-        ["normal", "cpu_intensive"],
-        format_func=lambda value: {
-            "normal": "Normal Workload",
-            "cpu_intensive": "CPU-Intensive Workload",
-        }[value],
+    "Workload Type",
+    [
+        "normal",
+        "cpu_intensive",
+        "memory_intensive",
+        "mixed",
+    ],
+    format_func=lambda value: {
+        "normal": "Normal Workload",
+        "cpu_intensive": "CPU-Intensive Workload",
+        "memory_intensive": "Memory-Intensive Workload",
+        "mixed": "Mixed CPU + Memory Workload",
+    }[value],
     )
 
     iterations = st.slider(
@@ -215,6 +233,7 @@ if not df.empty:
     )
 
     # Processing duration chart
+    
     st.subheader("⏱️ Processing Duration")
 
     chart_df = df[["job_id", "duration_seconds"]].copy()
@@ -232,6 +251,62 @@ else:
     st.info(
         "No jobs found. Submit your first processing job above."
     )
+
+
+# --------------------------------------------------
+# Historical CPU and memory charts
+# --------------------------------------------------
+
+st.divider()
+st.subheader("📈 Historical Resource Utilization")
+
+if st.button("🔄 Refresh Metrics"):
+    st.rerun()
+
+samples = get_metrics_history()
+
+if samples:
+    metrics_df = pd.DataFrame(samples)
+    metrics_df["timestamp"] = pd.to_datetime(
+        metrics_df["timestamp"],
+        errors="coerce",
+    )
+    metrics_df = (
+        metrics_df.dropna(subset=["timestamp"])
+        .sort_values("timestamp")
+        .set_index("timestamp")
+    )
+
+    cpu_col, memory_col = st.columns(2)
+
+    with cpu_col:
+        st.markdown("**CPU Utilization (%)**")
+        st.line_chart(
+            metrics_df[
+                ["process_cpu_percent", "system_cpu_percent"]
+            ],
+            height=300,
+        )
+
+    with memory_col:
+        st.markdown("**Memory Utilization**")
+        st.line_chart(
+            metrics_df[
+                ["process_memory_mb", "system_memory_percent"]
+            ],
+            height=300,
+        )
+
+    st.caption(
+        f"Displaying {len(metrics_df)} collected samples. "
+        "Backend memory is in MB; system memory is in percent."
+    )
+else:
+    st.info(
+        "No historical metrics available yet. "
+        "Keep FastAPI running and wait for the collector to record samples."
+    )
+
 
 # --------------------------------------------------
 # 7. Footer
