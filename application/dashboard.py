@@ -12,25 +12,54 @@ st.set_page_config(
 )
 
 st.title("📊 Data Processing & Job Analytics")
-st.caption("Submit processing jobs, monitor performance, and inspect results.")
+st.caption(
+    "Submit processing jobs, inspect results, and monitor system resources."
+)
 
-# Check backend availability
+# --------------------------------------------------
+# 1. Backend connection
+# --------------------------------------------------
+
+def get_system_metrics():
+    try:
+        response = requests.get(
+            f"{API_URL}/metrics/system",
+            timeout=5,
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException:
+        return None
+
+
 try:
-    health = requests.get(f"{API_URL}/health", timeout=3)
-    api_online = health.status_code == 200
+    health_response = requests.get(
+        f"{API_URL}/health",
+        timeout=3,
+    )
+    api_online = health_response.status_code == 200
 except requests.RequestException:
     api_online = False
 
 if api_online:
     st.success("Backend API: Connected")
 else:
-    st.error("Backend API is unavailable. Start FastAPI on port 8000.")
+    st.error(
+        "Backend API unavailable. Start FastAPI on port 8000."
+    )
 
-# Fetch job history
+# --------------------------------------------------
+# 2. Retrieve job history
+# --------------------------------------------------
+
 jobs = []
+
 if api_online:
     try:
-        response = requests.get(f"{API_URL}/jobs", timeout=5)
+        response = requests.get(
+            f"{API_URL}/jobs",
+            timeout=5,
+        )
         response.raise_for_status()
         jobs = response.json().get("jobs", [])
     except requests.RequestException as exc:
@@ -38,31 +67,92 @@ if api_online:
 
 df = pd.DataFrame(jobs)
 
+# --------------------------------------------------
+# 3. Job statistics
+# --------------------------------------------------
+
 total = len(df)
-completed = int((df["status"] == "completed").sum()) if total else 0
-failed = int((df["status"] == "failed").sum()) if total else 0
-avg_duration = (
-    float(df["duration_seconds"].mean()) if total else 0.0
+
+completed = (
+    int((df["status"] == "completed").sum())
+    if total else 0
 )
 
+failed = (
+    int((df["status"] == "failed").sum())
+    if total else 0
+)
+
+avg_duration = (
+    float(df["duration_seconds"].mean())
+    if total else 0.0
+)
+
+st.subheader("📋 Job Overview")
+
 col1, col2, col3, col4 = st.columns(4)
+
 col1.metric("Total Jobs", total)
 col2.metric("Completed", completed)
 col3.metric("Failed", failed)
 col4.metric("Avg Duration", f"{avg_duration:.3f} s")
 
-st.divider()
+# --------------------------------------------------
+# 4. CPU and memory monitoring
+# --------------------------------------------------
 
+st.divider()
+st.subheader("💻 Resource Utilization")
+
+metrics = get_system_metrics() if api_online else None
+
+if metrics:
+    cpu_col, mem_col, sys_cpu_col, sys_mem_col = st.columns(4)
+
+    cpu_col.metric(
+        "Backend CPU",
+        f"{metrics['process_cpu_percent']:.1f}%",
+        help="CPU utilization reported for the FastAPI process.",
+    )
+
+    mem_col.metric(
+        "Backend Memory",
+        f"{metrics['process_memory_mb']:.1f} MB",
+        help="Resident memory used by the FastAPI process.",
+    )
+
+    sys_cpu_col.metric(
+        "System CPU",
+        f"{metrics['system_cpu_percent']:.1f}%",
+        help="Overall CPU utilization of your laptop.",
+    )
+
+    sys_mem_col.metric(
+        "System Memory",
+        f"{metrics['system_memory_percent']:.1f}%",
+        help="Percentage of system memory currently in use.",
+    )
+else:
+    st.warning(
+        "Resource metrics unavailable. Verify that "
+        "/metrics/system is implemented and responding."
+    )
+
+# --------------------------------------------------
+# 5. Submit a processing job
+# --------------------------------------------------
+
+st.divider()
 st.subheader("🚀 Submit a Processing Job")
 
 with st.form("job_form"):
     workload = st.selectbox(
         "Workload Type",
         ["normal", "cpu_intensive"],
-        format_func=lambda x: {
+        format_func=lambda value: {
             "normal": "Normal Workload",
             "cpu_intensive": "CPU-Intensive Workload",
-        }[x],
+        }[value],
     )
 
     iterations = st.slider(
@@ -101,9 +191,12 @@ if submitted:
         except requests.RequestException as exc:
             st.error(f"Job submission failed: {exc}")
 
-st.divider()
+# --------------------------------------------------
+# 6. Job history
+# --------------------------------------------------
 
-st.subheader("📋 Job History")
+st.divider()
+st.subheader("📜 Job History")
 
 if not df.empty:
     display_columns = [
@@ -114,24 +207,38 @@ if not df.empty:
         "duration_seconds",
         "completed_at",
     ]
+
     st.dataframe(
         df[display_columns],
         use_container_width=True,
         hide_index=True,
     )
 
+    # Processing duration chart
     st.subheader("⏱️ Processing Duration")
+
     chart_df = df[["job_id", "duration_seconds"]].copy()
+
     chart_df["job"] = [
-        f"Job {i + 1}" for i in range(len(chart_df))
+        f"Job {index + 1}"
+        for index in range(len(chart_df))
     ]
+
     st.bar_chart(
         chart_df.set_index("job")["duration_seconds"]
     )
+
 else:
-    st.info("No jobs found. Submit your first job above.")
+    st.info(
+        "No jobs found. Submit your first processing job above."
+    )
+
+# --------------------------------------------------
+# 7. Footer
+# --------------------------------------------------
+
+st.divider()
 
 st.caption(
-    "Prototype v0.1 | CPU and memory monitoring will be added "
-    "in a later milestone."
+    "Prototype v0.2 | Job analytics and basic resource monitoring"
 )

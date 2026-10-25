@@ -1,7 +1,8 @@
 import time
 import uuid
+import os
+import psutil
 from datetime import datetime, timezone
-
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
@@ -9,7 +10,23 @@ app = FastAPI(
     title="Data Processing and Job Analytics Platform",
     description="A workload-driven application for anomaly detection research.",
     version="0.1.0",
+    
 )
+
+process = psutil.Process(os.getpid())
+
+
+@app.get("/metrics/system")
+def system_metrics():
+    return {
+        "process_cpu_percent": process.cpu_percent(interval=0.2),
+        "process_memory_mb": round(
+            process.memory_info().rss / (1024 * 1024), 2
+        ),
+        "system_cpu_percent": psutil.cpu_percent(interval=0.2),
+        "system_memory_percent": psutil.virtual_memory().percent,
+    }
+
 
 jobs = {}
 
@@ -34,6 +51,8 @@ def home():
 @app.get("/health")
 def health():
     return {"status": "healthy"}
+
+
 
 
 @app.post("/jobs")
@@ -76,3 +95,4 @@ def get_job(job_id: str):
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job not found")
     return jobs[job_id]
+
