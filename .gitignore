@@ -7,3 +7,39 @@ __pycache__/
 !.env.example
 .pytest_cache/
 .coverage
+htmlcov/
+
+# Local secrets and credentials
+.streamlit/secrets.toml
+**/secrets.toml
+.aws/
+**/.aws/
+.ssh/
+**/.ssh/
+id_rsa
+id_ed25519
+*.pem
+*.key
+*.p12
+*.pfx
+credentials
+**/credentials
+credentials.*
+
+# Runtime databases and SQLite sidecars; retain only the data directory marker
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+data/*
+!data/.gitkeep
+
+# Ephemeral test and local runtime artifacts
+archive/backups/
+archive/test-artifacts/
+tmp*/
+**/tmp*/
+*-tests-*/
+**/*-tests-*/
+*.log
+.streamlit/cache/
