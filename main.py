@@ -10,7 +10,8 @@ import math
 import numbers
 from collections import deque
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field
 from collections import Counter
 from fastapi import Request
@@ -33,6 +34,19 @@ from core.anomaly_engine import (
     restore_states,
 )
 from core.anomaly_policy import POLICIES, condition_for, public_policy
+from core.prometheus_metrics import (
+    REGISTRY as PROMETHEUS_REGISTRY,
+    http_request_duration_seconds as prometheus_http_request_duration_seconds,
+    http_requests_in_flight as prometheus_http_requests_in_flight,
+    http_requests_total as prometheus_http_requests_total,
+    normalize_method as normalize_http_method,
+    record_job as record_prometheus_job,
+    route_template as prometheus_route_template,
+    status_class as prometheus_status_class,
+    update_anomaly_state as update_prometheus_anomaly_state,
+    update_collector_gauges as update_prometheus_collector_gauges,
+    update_http_anomaly_gauges as update_prometheus_http_anomaly_gauges,
+)
 
 initialize_database()
 
@@ -55,11 +69,18 @@ http_metrics = {
 
 @app.middleware("http")
 async def collect_http_metrics(request: Request, call_next):
+    # Avoid scrape feedback into business request and anomaly statistics.
+    if request.url.path == "/metrics":
+        return await call_next(request)
+
     started = time.perf_counter()
     endpoint = request.url.path
 
     with http_metrics_lock:
         http_metrics["in_flight_requests"] += 1
+        prometheus_http_requests_in_flight.set(
+            http_metrics["in_flight_requests"]
+        )
 
     status_code = 500
 
@@ -79,6 +100,9 @@ async def collect_http_metrics(request: Request, call_next):
             "status_code": status_code,
             "latency_ms": round(latency_ms, 2),
         }
+        method = normalize_http_method(request.method)
+        route = prometheus_route_template(request)
+        status = prometheus_status_class(status_code)
 
         with http_metrics_lock:
             http_metrics["total_requests"] += 1
@@ -87,6 +111,11 @@ async def collect_http_metrics(request: Request, call_next):
             http_metrics["total_latency_ms"] += latency_ms
             http_metrics["recent_requests"].append(sample)
             http_metrics["in_flight_requests"] -= 1
+            prometheus_http_requests_total.labels(method, route, status).inc()
+            prometheus_http_request_duration_seconds.labels(method, route).observe(
+                latency_ms / 1000.0
+            )
+            prometheus_http_requests_in_flight.set(http_metrics["in_flight_requests"])
 
 process = psutil.Process(os.getpid())
 
@@ -106,15 +135,17 @@ def collect_metrics():
         timestamp = datetime.now(timezone.utc).isoformat()
 
         try:
+            rss_bytes = process.memory_info().rss
             sample = {
                 "timestamp": timestamp,
                 "process_cpu_percent": metrics_process.cpu_percent(),
-                "process_memory_mb": round(
-                    process.memory_info().rss / (1024 * 1024), 2
-                ),
+                "process_memory_mb": round(rss_bytes / (1024 * 1024), 2),
                 "system_cpu_percent": psutil.cpu_percent(),
                 "system_memory_percent": psutil.virtual_memory().percent,
             }
+            update_prometheus_collector_gauges(
+                sample, process_rss_bytes=rss_bytes
+            )
 
             with metrics_lock:
                 metrics_history.append(sample)
@@ -131,6 +162,16 @@ metrics_thread = threading.Thread(
     name="metrics-collector",
 )
 metrics_thread.start()
+
+
+@app.get("/metrics", include_in_schema=False)
+def prometheus_metrics():
+    """Expose the dedicated Prometheus registry without scanning app history."""
+    return Response(
+        content=generate_latest(PROMETHEUS_REGISTRY),
+        media_type=CONTENT_TYPE_LATEST,
+    )
+
 
 @app.get("/metrics/http")
 def get_http_metrics():
@@ -474,6 +515,8 @@ def restore_active_alert_state():
     with anomaly_state_lock:
         signal_states.clear()
         signal_states.update(restored)
+        for state in restored.values():
+            update_prometheus_anomaly_state(state)
         cpu_alert_history.clear()
         cpu_alert_history.extend(get_all_alerts(limit=500))
         _sync_legacy_cpu_state()
@@ -623,6 +666,7 @@ def _process_signal_samples(samples, *, now=None):
 
         for key, new_state, alert, resolved in candidates:
             signal_states[key] = new_state
+            update_prometheus_anomaly_state(new_state)
             failed_sample_attempts.pop(key, None)
             if alert and alert["alert_id"] == new_state.get("active_alert_id"):
                 cpu_alert_history.append(alert)
@@ -761,7 +805,9 @@ def evaluate_anomalies():
 
             monotonic_now = time.monotonic()
             if monotonic_now >= next_http_check:
-                observations.extend(_evaluate_http_metrics(now))
+                http_observations = _evaluate_http_metrics(now)
+                update_prometheus_http_anomaly_gauges(http_observations)
+                observations.extend(http_observations)
                 next_http_check = monotonic_now + 1.0
 
             _process_signal_samples(observations, now=now)
@@ -1151,9 +1197,13 @@ def create_job(request: JobRequest):
         }
 
         jobs[job_id] = job
+        record_prometheus_job(request.workload, "completed", duration)
         return job
 
     except Exception as exc:
+        record_prometheus_job(
+            request.workload, "failed", time.perf_counter() - started
+        )
         raise HTTPException(
             status_code=500,
             detail=f"Job processing failed: {type(exc).__name__}",

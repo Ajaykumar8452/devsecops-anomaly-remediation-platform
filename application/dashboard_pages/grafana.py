@@ -2,6 +2,7 @@ import streamlit as st
 
 from application.dashboard_api import (
     check_grafana,
+    grafana_internal_url,
     grafana_settings,
     valid_http_url,
 )
@@ -29,11 +30,28 @@ def render():
         st.warning("`GRAFANA_DASHBOARD_URL` is invalid; the configured base URL will be used instead.")
         target = base_url
 
-    available, error = check_grafana(base_url)
+    available, error = check_grafana(
+        base_url,
+        health_url=grafana_internal_url() or base_url,
+    )
     if available:
         st.success("Grafana is reachable.")
         st.link_button("Open Grafana dashboard", target, type="primary")
         st.caption(f"Configured base URL: {base_url}")
+        dashboards = (
+            ("Application Overview", "application-overview"),
+            ("HTTP Performance", "http-performance"),
+            ("Anomaly Monitoring", "anomaly-monitoring"),
+            ("Job Analytics", "job-analytics"),
+        )
+        st.subheader("Provisioned dashboards")
+        columns = st.columns(2)
+        for index, (title, uid) in enumerate(dashboards):
+            columns[index % 2].link_button(
+                title,
+                f"{base_url}/d/{uid}/{uid}",
+                use_container_width=True,
+            )
     else:
         st.warning("Grafana is configured but currently unavailable. Streamlit monitoring remains available.")
         st.caption(error or "Grafana health check failed.")

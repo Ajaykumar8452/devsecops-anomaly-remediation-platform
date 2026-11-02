@@ -22,6 +22,11 @@ def grafana_settings():
     )
 
 
+def grafana_internal_url():
+    """Return Grafana's Docker-network URL for server-side health checks."""
+    return os.getenv("GRAFANA_INTERNAL_URL", "").strip().rstrip("/")
+
+
 def request_json(path: str, *, params=None, timeout=DEFAULT_TIMEOUT):
     """Return ``(status_code, payload, error)`` without raising on API failures."""
     try:
@@ -117,12 +122,15 @@ def valid_http_url(url: str) -> bool:
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
-def check_grafana(base_url: str):
+def check_grafana(base_url: str, *, health_url: str | None = None):
     """Return Grafana's availability without making it a dashboard dependency."""
     if not valid_http_url(base_url):
         return False, "Configure a valid HTTP or HTTPS Grafana URL."
+    endpoint = (health_url or base_url).rstrip("/")
+    if not valid_http_url(endpoint):
+        return False, "Configure a valid HTTP or HTTPS Grafana health URL."
     try:
-        response = requests.get(f"{base_url.rstrip('/')}/api/health", timeout=2)
+        response = requests.get(f"{endpoint}/api/health", timeout=2)
     except requests.RequestException as exc:
         return False, str(exc)
     if response.ok:

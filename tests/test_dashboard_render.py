@@ -351,7 +351,14 @@ class DashboardRenderTests(unittest.TestCase):
         os.environ["GRAFANA_DASHBOARD_URL"] = "http://127.0.0.1:3000/d/test"
         app = self.render_page("Grafana Integration")
         self.assertTrue(any("Grafana is reachable" in str(item.value) for item in app.success))
-        self.assertEqual(len(app.link_button), 1)
+        self.assertEqual(len(app.link_button), 5)
+        self.assertEqual(
+            {button.label for button in app.link_button},
+            {
+                "Open Grafana dashboard", "Application Overview",
+                "HTTP Performance", "Anomaly Monitoring", "Job Analytics",
+            },
+        )
         os.environ["GRAFANA_BASE_URL"] = "http://127.0.0.1:1"
         os.environ.pop("GRAFANA_DASHBOARD_URL", None)
         app = self.render_page("Grafana Integration")

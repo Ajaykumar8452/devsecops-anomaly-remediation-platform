@@ -49,6 +49,9 @@ services:
         required: false
     environment:
       ANOMALY_DASHBOARD_API_URL: http://backend:8000
+      GRAFANA_BASE_URL: ${GRAFANA_BASE_URL:-http://127.0.0.1:3000}
+      GRAFANA_INTERNAL_URL: http://grafana:3000
+      GRAFANA_DASHBOARD_URL: ${GRAFANA_DASHBOARD_URL:-}
     depends_on:
       backend:
         condition: service_healthy
@@ -74,5 +77,76 @@ services:
         max-size: 10m
         max-file: "3"
 
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    mem_limit: 512m
+    cpus: 0.50
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -qO- http://127.0.0.1:9090/-/healthy >/dev/null || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  grafana:
+    image: grafana/grafana:13.2.4
+    restart: unless-stopped
+    env_file:
+      - path: .env.grafana
+        required: true
+    environment:
+      GF_SERVER_ROOT_URL: ${GRAFANA_BASE_URL:-http://127.0.0.1:3000}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    mem_limit: 512m
+    cpus: 0.50
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
 volumes:
   alert_data:
+  prometheus_data:
+  grafana_data:
