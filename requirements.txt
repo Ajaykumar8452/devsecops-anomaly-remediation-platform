@@ -1,6 +1,2 @@
-fastapi
-uvicorn[standard]
-psutil
-streamlit>=1.50,<2
-pandas>=2.0,<4
-requests>=2.31,<3
+-r requirements-backend.txt
+-r requirements-dashboard.txt

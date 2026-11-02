@@ -7,14 +7,20 @@ This academic project currently provides a FastAPI service for local metrics, jo
 ## Architecture
 
 ```text
-Streamlit control center (application/)
+Docker Compose (optional local container setup)
+  ├── backend: FastAPI, anomaly engine and SQLite
+  └── dashboard: seven-page Streamlit control center
+        │ HTTP / JSON over the Compose network
+        ▼
+      backend:8000
+
+Local development (without Docker)
         │ HTTP / JSON
         ▼
 FastAPI service (main.py)
   ├── metrics and job endpoints
   ├── anomaly evaluator and health watchdog
   └── core/ policies, state machine and SQLite persistence
-        │
         └── data/alerts.db (local runtime data; ignored by Git)
 
 Experiments: experiments/scripts/ → experiments/results/
@@ -35,7 +41,7 @@ The evaluator stores per-signal state, alert lifecycle and event history in SQLi
 - SQLite
 - Python `unittest` for automated tests
 
-No Docker, Kubernetes, Prometheus or Grafana deployment is included in the repository. The dashboard can link to an externally provided Grafana instance when configured.
+Docker Compose packages the backend and dashboard for local use. Kubernetes, Prometheus, Grafana installation and remediation are not included. The dashboard can link to an externally provided Grafana instance when configured.
 
 ## Repository structure
 
@@ -48,10 +54,15 @@ experiments/scripts/          Metric and workload experiment recorders
 experiments/results/          Preserved CSV/JSON experiment outputs
 archive/backups/              Preserved historical backend source snapshots
 archive/test-artifacts/       Preserved interrupted test-run artifacts (ignored)
+docker/                       Backend startup helper for safe SQLite volume seeding
 tests/                        Unit, integration and dashboard rendering tests
 main.py                       Root FastAPI application entry point
-requirements.txt              Runtime and dashboard dependencies
+requirements*.txt             Combined development and split service dependencies
 .env.example                  Optional local endpoint configuration reference
+Dockerfile                    FastAPI backend image
+Dockerfile.dashboard          Streamlit dashboard image
+docker-compose.yml            Local two-service orchestration and persistent volume
+.dockerignore                 Excludes data, secrets, environments and build-irrelevant artifacts
 ```
 
 ## Installation
@@ -88,6 +99,36 @@ python -m streamlit run application/dashboard.py --server.address 127.0.0.1 --se
 Open <http://127.0.0.1:8501>. The FastAPI OpenAPI page is at <http://127.0.0.1:8000/docs>.
 
 Optional Grafana integration uses `GRAFANA_BASE_URL`. `GRAFANA_DASHBOARD_URL` can point directly to a dashboard; otherwise the base URL is linked. Grafana is not required for Streamlit to run.
+
+## Run with Docker Compose
+
+Docker and the Docker Compose plugin are required. From the repository root:
+
+```powershell
+docker compose config
+docker compose build
+docker compose up -d
+docker compose ps
+```
+
+The services are available at <http://127.0.0.1:8501> (dashboard), <http://127.0.0.1:8000/docs> (FastAPI documentation), <http://127.0.0.1:8000/health>, <http://127.0.0.1:8000/livez> and <http://127.0.0.1:8000/readyz>. The dashboard calls `http://backend:8000` over the Compose network; that hostname is not exposed as a host URL.
+
+The backend runs as a non-root user and stores SQLite at `/app/data/alerts.db` in the named volume `alert_data`. The existing `data/alerts.db` is bind-mounted read-only as a seed source. On the first start with an empty named volume, the backend entrypoint uses SQLite's backup API to copy a consistent database snapshot into the volume. The seed is never written to, and an existing volume database is never replaced. Subsequent starts use the named-volume database. If the source database is absent on first start, the application initializes a new database in the volume.
+
+The Compose file loads an optional, ignored `.env` file into both services. Copy `.env.example` to `.env` if you want to set policy or optional Grafana variables; Compose keeps the dashboard backend URL set to `http://backend:8000`. The backend's database path is fixed to the mounted volume so it cannot silently write to the container filesystem.
+
+Useful operations:
+
+```powershell
+docker compose logs -f backend dashboard
+docker compose restart backend dashboard
+docker compose stop
+docker compose down
+```
+
+`docker compose down` preserves `alert_data`. Do not use `docker compose down -v` for this application unless you intentionally want to delete its persistent alert database. Container health checks use `/readyz` for FastAPI and Streamlit's `/_stcore/health` endpoint for the dashboard.
+
+The application currently samples FastAPI process CPU/RSS and system memory via psutil. In a container, system metrics reflect what the container's operating system exposes; these are not Kubernetes Pod/Deployment metrics or a cgroup resource dashboard. Job history and metrics history remain in memory and are not made durable by the SQLite alert volume.
 
 ## API endpoints
 
@@ -130,10 +171,10 @@ The tests use temporary databases and local fixture APIs. Do not run experiments
 - Liveness and readiness endpoints.
 - Seven-page Streamlit control center, job submission/history, alert history and optional Grafana linking.
 - Experiment recording scripts and preserved experiment result files.
+- Dockerfiles and a Compose setup for local backend/dashboard containers with named SQLite persistence.
 
 ### Planned
 
-- Docker packaging and Compose development setup.
 - Kubernetes deployment, probes, resource configuration and least-privilege integration.
 - Grafana installation and infrastructure data source/dashboard provisioning.
 - Anomaly-driven remediation policy and execution engine, approvals, dry-run, audit and post-action verification.
