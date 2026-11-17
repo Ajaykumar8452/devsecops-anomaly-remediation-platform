@@ -1,0 +1,7 @@
+state_bucket_name = "replace-with-a-globally-unique-lowercase-name"
+aws_region        = "ap-south-1"
+environment       = "dev"
+
+tags = {
+  Owner = "project-team"
+}

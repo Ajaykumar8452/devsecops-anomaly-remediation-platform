@@ -1,0 +1,103 @@
+#cloud-config
+package_update: true
+packages:
+  - ca-certificates
+  - curl
+  - gnupg
+
+write_files:
+  - path: /usr/local/sbin/bootstrap-jenkins.sh
+    owner: root:root
+    permissions: '0700'
+    content: |
+      #!/usr/bin/env bash
+      set -Eeuo pipefail
+      exec > >(tee -a /var/log/jenkins-bootstrap.log) 2>&1
+      trap 'status=$?; echo "Jenkins bootstrap failed at line $${LINENO} (exit $${status})"; exit "$status"' ERR
+
+      install -m 0755 -d /etc/apt/keyrings
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+      chmod 0644 /etc/apt/keyrings/docker.asc
+      . /etc/os-release
+      printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu %s stable\n' \
+        "$(dpkg --print-architecture)" "$VERSION_CODENAME" > /etc/apt/sources.list.d/docker.list
+
+      curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key -o /etc/apt/keyrings/jenkins-keyring.asc
+      chmod 0644 /etc/apt/keyrings/jenkins-keyring.asc
+      printf 'deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/\n' \
+        > /etc/apt/sources.list.d/jenkins.list
+
+      TRIVY_VERSION='0.74.0'
+      TRIVY_ASSET="trivy_$${TRIVY_VERSION}_Linux-64bit.deb"
+      TRIVY_RELEASE_URL="https://github.com/aquasecurity/trivy/releases/download/v$${TRIVY_VERSION}"
+      TRIVY_DEB_SHA256='cf1e32ec8d4d8823e023096a28cadb14f5b5123ce03f201fb633c5b76aa712dd'
+      TRIVY_CHECKSUMS_SHA256='bc701c3c3ee8b9acbea2c23257e41381e3854888f51281616a6ba5dc96963821'
+      TRIVY_WORKDIR="$(mktemp -d)"
+      trap 'rm -rf "$TRIVY_WORKDIR"' EXIT
+      TRIVY_CHECKSUMS_PATH="$TRIVY_WORKDIR/trivy-checksums.txt"
+      TRIVY_DEB_PATH="$TRIVY_WORKDIR/$TRIVY_ASSET"
+
+      curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https' \
+        "$TRIVY_RELEASE_URL/trivy_$${TRIVY_VERSION}_checksums.txt" -o "$TRIVY_CHECKSUMS_PATH"
+      if ! printf '%s  %s\n' "$TRIVY_CHECKSUMS_SHA256" "$TRIVY_CHECKSUMS_PATH" | sha256sum --check --status; then
+        echo "Official Trivy v$${TRIVY_VERSION} checksum manifest failed SHA-256 verification." >&2
+        exit 1
+      fi
+      trivy_checksum="$(awk -v asset="$TRIVY_ASSET" \
+        '$2 == asset { if (found++) exit 1; digest = $1 } END { if (found != 1) exit 1; print digest }' \
+        "$TRIVY_CHECKSUMS_PATH")"
+      if [ "$trivy_checksum" != "$TRIVY_DEB_SHA256" ]; then
+        echo "Official Trivy checksum manifest does not contain the pinned Debian package checksum." >&2
+        exit 1
+      fi
+
+      curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https' \
+        "$TRIVY_RELEASE_URL/$TRIVY_ASSET" -o "$TRIVY_DEB_PATH"
+      if ! printf '%s  %s\n' "$trivy_checksum" "$TRIVY_DEB_PATH" | sha256sum --check --status; then
+        echo "Trivy v$${TRIVY_VERSION} Debian package failed SHA-256 verification." >&2
+        exit 1
+      fi
+      test "$(dpkg-deb --field "$TRIVY_DEB_PATH" Version)" = "$TRIVY_VERSION"
+      test "$(dpkg-deb --field "$TRIVY_DEB_PATH" Architecture)" = "amd64"
+
+      apt-get update
+      DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        openjdk-21-jdk git \
+        docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin \
+        jenkins "$TRIVY_DEB_PATH"
+
+      systemctl enable --now docker.service
+      jenkins_group_changed=0
+      if ! id -nG jenkins | tr ' ' '\n' | grep -Fxq docker; then
+        usermod -aG docker jenkins
+        jenkins_group_changed=1
+      fi
+
+      systemctl enable jenkins.service
+      if systemctl is-active --quiet jenkins.service; then
+        if [ "$jenkins_group_changed" -eq 1 ]; then
+          systemctl restart jenkins.service
+        fi
+      else
+        systemctl start jenkins.service
+      fi
+
+      java_output="$(java -version 2>&1)"
+      printf '%s\n' "$java_output"
+      grep -Eq 'version "21([.]|")' <<<"$java_output"
+      git --version
+      docker --version
+      docker buildx version
+      docker compose version
+      trivy_output="$(trivy --version)"
+      printf '%s\n' "$trivy_output"
+      grep -Fq "Version: $TRIVY_VERSION" <<<"$trivy_output"
+      systemctl is-active --quiet docker.service
+      systemctl is-active --quiet jenkins.service
+      id -nG jenkins | tr ' ' '\n' | grep -Fxq docker
+      runuser -u jenkins -- docker info --format '{{.ServerVersion}}'
+      dpkg-query -W -f='Jenkins package version: $${Version}\n' jenkins
+      echo 'Jenkins, Docker, Buildx, Compose, Git, Java 21, and Trivy verification passed.'
+
+runcmd:
+  - [bash, /usr/local/sbin/bootstrap-jenkins.sh]

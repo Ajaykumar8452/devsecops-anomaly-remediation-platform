@@ -1,0 +1,32 @@
+#cloud-config
+package_update: true
+packages:
+  - ca-certificates
+  - curl
+  - python3
+  - tar
+
+write_files:
+  - path: /usr/local/sbin/install-k3s.py
+    owner: root:root
+    permissions: '0750'
+    encoding: gzip+base64
+    content: ${install_k3s_gzip_b64}
+  - path: /usr/local/sbin/install-helm.py
+    owner: root:root
+    permissions: '0750'
+    encoding: gzip+base64
+    content: ${install_helm_gzip_b64}
+  - path: /usr/local/sbin/bootstrap-k3s.sh
+    owner: root:root
+    permissions: '0750'
+    encoding: b64
+    content: ${bootstrap_k3s_b64}
+  - path: /etc/k3s/install-config.json
+    owner: root:root
+    permissions: '0600'
+    encoding: b64
+    content: ${k3s_install_metadata_b64}
+
+runcmd:
+  - [bash, /usr/local/sbin/bootstrap-k3s.sh]

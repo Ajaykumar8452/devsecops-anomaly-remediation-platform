@@ -1,0 +1,7 @@
+# Copy to backend.hcl only after bootstrap creates and verifies the bucket.
+# Replace the bucket placeholder with the confirmed bucket name.
+bucket       = "REPLACE_WITH_VERIFIED_BUCKET_NAME"
+key          = "dev/devsecops-platform.tfstate"
+region       = "ap-south-1"
+use_lockfile = true
+encrypt      = true

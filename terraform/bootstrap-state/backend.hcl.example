@@ -1,0 +1,7 @@
+# Copy this file to backend.hcl and replace the bucket placeholder only after
+# the state bucket has been created and verified.
+bucket       = "REPLACE_WITH_THE_CREATED_STATE_BUCKET_NAME"
+key          = "terraform/bootstrap-state/terraform.tfstate"
+region       = "ap-south-1"
+use_lockfile = true
+encrypt      = true

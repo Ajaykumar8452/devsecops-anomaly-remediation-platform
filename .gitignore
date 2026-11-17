@@ -43,3 +43,33 @@ tmp*/
 **/*-tests-*/
 *.log
 .streamlit/cache/
+
+# Generated experiment output (retain local results, do not stage by default)
+/experiments/results/
+
+# Terraform local data and generated plans; keep .terraform.lock.hcl trackable
+.terraform/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.plan
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.tfvars
+!*.tfvars.example
+**/backend.hcl
+
+# Local Kubernetes credentials
+.kube/
+**/.kube/
+kubeconfig
+kubeconfig.*
+*.kubeconfig
+
+# Local Docker credentials
+.docker/
+**/.docker/
+*.dockerconfigjson
