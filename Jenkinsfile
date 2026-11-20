@@ -196,14 +196,29 @@ finally:
                     credentialsId: 'Docker',
                     usernameVariable: 'DOCKERHUB_USER',
                     passwordVariable: 'DOCKERHUB_TOKEN'
-                )]) {
+                )]) 
+                
+                {
                     sh '''#!/usr/bin/env bash
                         set +x
                         set -euo pipefail
-                        printf '%s' "$DOCKERHUB_TOKEN" | docker login \
-                          --username "$DOCKERHUB_USER" \
+
+                        CLEAN_USER="$(printf '%s' "$DOCKERHUB_USER" | tr -d '[:space:]')"
+                        CLEAN_TOKEN="$(printf '%s' "$DOCKERHUB_TOKEN" | tr -d '[:space:]')"
+
+                        if [ -z "$CLEAN_USER" ] || [ -z "$CLEAN_TOKEN" ]; then
+                            echo "Error: Docker Hub username or token is empty." >&2
+                            exit 1
+                        fi
+
+                        export DOCKER_CONFIG="$WORKSPACE/.docker-ci"
+                        mkdir -p "$DOCKER_CONFIG"
+                        trap 'docker logout >/dev/null 2>&1 || true; rm -rf "$DOCKER_CONFIG"' EXIT
+
+                        printf '%s' "$CLEAN_TOKEN" | docker login \
+                          --username "$CLEAN_USER" \
                           --password-stdin
-                        trap 'docker logout >/dev/null 2>&1 || true' EXIT
+
                         docker tag "$BACKEND_LOCAL_IMAGE" "$BACKEND_TAG"
                         docker tag "$DASHBOARD_LOCAL_IMAGE" "$DASHBOARD_TAG"
                         docker push "$BACKEND_TAG"
