@@ -93,6 +93,10 @@ resource "aws_vpc_security_group_ingress_rule" "k3s_api_from_jenkins" {
   tags                         = local.common_tags
 }
 
+# Temporary academic-project exception: this single-node host needs outbound
+# access for OS/K3s updates and public container image pulls. Public egress is
+# broader than least privilege and must be narrowed before production use.
+#trivy:ignore:AVD-AWS-0104:exp:2027-02-20
 resource "aws_vpc_security_group_egress_rule" "k3s_ipv4_outbound" {
   security_group_id = aws_security_group.ec2.id
   description       = "IPv4 egress for Ubuntu updates, image pulls, and K3s downloads."
@@ -101,6 +105,10 @@ resource "aws_vpc_security_group_egress_rule" "k3s_ipv4_outbound" {
   tags              = local.common_tags
 }
 
+# Temporary academic-project exception: Jenkins needs outbound access to GitHub,
+# Docker Hub, package repositories, and Trivy feeds. Public egress is broader
+# than least privilege and must be narrowed before production use.
+#trivy:ignore:AVD-AWS-0104:exp:2027-02-20
 resource "aws_vpc_security_group_egress_rule" "jenkins_ipv4_outbound" {
   security_group_id = aws_security_group.jenkins.id
   description       = "IPv4 egress for Ubuntu updates, GitHub, Docker Hub, and scanners."

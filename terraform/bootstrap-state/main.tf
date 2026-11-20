@@ -27,6 +27,10 @@ resource "aws_s3_bucket_versioning" "terraform_state" {
   }
 }
 
+# Temporary academic-project exception: SSE-S3 encrypts state at rest, and the
+# bucket also enforces TLS, blocks public access, and versions state. A CMK adds
+# key policy, recovery, and ongoing cost decisions; revisit before production.
+#trivy:ignore:AVD-AWS-0132:exp:2027-02-20
 resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state" {
   bucket = aws_s3_bucket.terraform_state.id
 

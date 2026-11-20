@@ -124,7 +124,7 @@ pipeline {
         always {
             sh '''#!/usr/bin/env bash
                 set +e
-                docker image rm "$BACKEND_LOCAL_IMAGE" "$DASHBOARD_LOCAL_IMAGE" >/dev/null 2>&1
+                docker image rm "$BACKEND_LOCAL_IMAGE" "$DASHBOARD_LOCAL_IMAGE" >/dev/null 2>&1 || echo 'Warning: Docker cleanup failed or one or both local images were absent.' >&2
             '''
         }
     }
