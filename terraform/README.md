@@ -87,13 +87,20 @@ configuration when that happens.
 
 ## Jenkins bootstrap
 
-Jenkins cloud-init installs Java 21, Git, Jenkins from the official LTS apt
+Jenkins cloud-init installs Java 21 in its own apt transaction first. It selects
+the Java 21 executable through `update-alternatives`, verifies that the active
+`java -version` reports major version 21, and stops bootstrap if that check
+fails. Only then does it install Git, Jenkins from the official LTS apt
 repository, Docker Engine from Docker's Ubuntu apt repository, Docker Buildx,
-the Docker Compose plugin, and Trivy `0.74.0` from Aqua Security's official
+the Docker Compose plugin, and Trivy `0.76.2` from Aqua Security's official
 GitHub release. Before installation, it verifies the SHA-256 of the official
 checksum manifest and Debian package, then confirms the package version and
-AMD64 architecture. It enables and starts Docker and Jenkins, adds the Jenkins
-account to the Docker group, and verifies installed tools and services.
+AMD64 architecture. After the package transaction, cloud-init reloads systemd,
+enables and starts Docker, adds the Jenkins account to the Docker group, and
+starts Jenkins. If Jenkins was previously failed, it resets the failed unit
+state before retrying startup. It finally verifies Java, installed tools,
+service health, Jenkins Docker-group membership, and Docker daemon access as
+the Jenkins user.
 Installation output is written to `/var/log/jenkins-bootstrap.log` and
 cloud-init's output log.
 
