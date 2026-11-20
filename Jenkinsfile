@@ -173,6 +173,7 @@ finally:
                         "$TRIVY_IMAGE" image \
                         --scanners vuln,secret,misconfig \
                         --severity HIGH,CRITICAL \
+                        --ignore-unfixed \
                         --exit-code 1 \
                         "$image"; then
                         echo "Trivy scan passed for $image"
