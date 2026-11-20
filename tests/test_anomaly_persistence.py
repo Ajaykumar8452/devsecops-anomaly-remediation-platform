@@ -28,7 +28,7 @@ def isolated_database_module():
 class AnomalyPersistenceTests(unittest.TestCase):
     def setUp(self):
         self.temp_directory = tempfile.TemporaryDirectory(
-            prefix="anomaly-persistence-", dir=PROJECT_ROOT
+            prefix="anomaly-persistence-"
         )
         self.database = isolated_database_module()
         self.database.DATABASE_PATH = Path(self.temp_directory.name) / "alerts.db"

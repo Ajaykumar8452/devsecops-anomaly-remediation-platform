@@ -12,10 +12,7 @@ from unittest.mock import Mock, patch
 
 from core.anomaly_engine import initial_state
 
-_project_root = Path(__file__).resolve().parents[1]
-_test_db = tempfile.TemporaryDirectory(
-    prefix="anomaly-adapter-tests-", dir=_project_root
-)
+_test_db = tempfile.TemporaryDirectory(prefix="anomaly-adapter-tests-")
 os.environ.setdefault(
     "ALERT_DATABASE_PATH",
     str(Path(_test_db.name) / "alerts.db"),

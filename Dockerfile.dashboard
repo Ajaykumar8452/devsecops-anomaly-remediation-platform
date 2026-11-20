@@ -18,7 +18,9 @@ RUN groupadd --system --gid 10001 app \
     && chown -R app:app /app /home/app
 
 COPY requirements-dashboard.txt ./requirements.txt
-RUN python -m pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --no-cache-dir --upgrade 'pip==26.3' \
+    && python -m pip --version \
+    && python -m pip install --no-cache-dir -r requirements.txt
 RUN set -eu; \
     for spec in 'msgpack>=1.2.3' 'setuptools>=78.1.1' 'urllib3>=2.8.0'; do \
       package="${spec%%[<>=]*}"; \
@@ -29,13 +31,28 @@ RUN set -eu; \
       fi; \
     done; \
     python -m pip check; \
-    python -m pip show msgpack setuptools urllib3 || true
+    python -m pip show msgpack setuptools urllib3 || true; \
+    rm -rf \
+      /usr/local/lib/python3.13/site-packages/pip \
+      /usr/local/lib/python3.13/site-packages/pip-*.dist-info \
+      /usr/local/lib/python3.13/ensurepip \
+      /usr/local/lib/python3.13/__pycache__/ensurepip* \
+      /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.13; \
+    test ! -e /usr/local/bin/pip \
+      && test ! -e /usr/local/bin/pip3 \
+      && test ! -e /usr/local/bin/pip3.13 \
+      && test ! -e /usr/local/lib/python3.13/ensurepip \
+      && test ! -e /usr/local/lib/python3.13/site-packages/pip-26.3.dist-info \
+      && \
+    python -c 'import importlib.metadata as m, importlib.util as u; assert u.find_spec("pip") is None; assert u.find_spec("ensurepip") is None; assert all(d.metadata["Name"].lower() != "pip" for d in m.distributions())'
 
 COPY --chown=app:app application/ ./application/
 COPY --chown=app:app core/ ./core/
 COPY --chown=app:app .streamlit/config.toml ./.streamlit/config.toml
 
 USER 10001:10001
+
+RUN python -c 'import streamlit, pandas, pyarrow, requests; import application.dashboard_api; print("dashboard import smoke passed without pip")'
 
 EXPOSE 8501
 

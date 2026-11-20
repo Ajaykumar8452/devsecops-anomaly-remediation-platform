@@ -6,10 +6,7 @@ import tempfile
 import unittest
 from types import SimpleNamespace
 
-_project_root = Path(__file__).resolve().parents[1]
-_test_directory = tempfile.TemporaryDirectory(
-    prefix="prometheus-metrics-tests-", dir=_project_root
-)
+_test_directory = tempfile.TemporaryDirectory(prefix="prometheus-metrics-tests-")
 os.environ.setdefault(
     "ALERT_DATABASE_PATH",
     str(Path(_test_directory.name) / "alerts.db"),

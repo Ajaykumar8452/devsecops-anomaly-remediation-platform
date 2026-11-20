@@ -4,7 +4,6 @@ import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-import tempfile
 import threading
 import unittest
 from urllib.parse import urlparse
@@ -238,8 +237,6 @@ class DashboardRenderTests(unittest.TestCase):
         os.environ["ANOMALY_DASHBOARD_API_URL"] = f"http://127.0.0.1:{self.server.server_port}"
         os.environ.pop("GRAFANA_BASE_URL", None)
         os.environ.pop("GRAFANA_DASHBOARD_URL", None)
-        self.old_tempdir = tempfile.tempdir
-        tempfile.tempdir = str(PROJECT_ROOT)
 
     def tearDown(self):
         for key, value in self.old_env.items():
@@ -247,7 +244,6 @@ class DashboardRenderTests(unittest.TestCase):
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
-        tempfile.tempdir = self.old_tempdir
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(timeout=2)

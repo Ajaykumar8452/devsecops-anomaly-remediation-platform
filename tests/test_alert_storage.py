@@ -5,8 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-_project_root = Path(__file__).resolve().parents[1]
-_test_directory = tempfile.TemporaryDirectory(prefix="alert-storage-tests-", dir=_project_root)
+_test_directory = tempfile.TemporaryDirectory(prefix="alert-storage-tests-")
 os.environ["ALERT_DATABASE_PATH"] = str(Path(_test_directory.name) / "nested" / "alerts.db")
 
 from core import database

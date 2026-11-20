@@ -1,6 +1,14 @@
 pipeline {
     agent any
 
+    parameters {
+        booleanParam(
+            name: 'PUSH_IMAGES',
+            defaultValue: false,
+            description: 'Publish the scanned immutable Docker Hub images only when explicitly enabled.'
+        )
+    }
+
     options {
         timestamps()
         disableConcurrentBuilds()
@@ -13,7 +21,7 @@ pipeline {
 
     environment {
         DOCKERHUB_REPOSITORY = 'ajaykumar8452/devsecops-platform'
-        TRIVY_IMAGE = 'aquasec/trivy:0.74.0'
+        TRIVY_IMAGE = 'aquasec/trivy:0.76.2'
         BACKEND_LOCAL_IMAGE = 'devsecops-platform-backend:ci'
         DASHBOARD_LOCAL_IMAGE = 'devsecops-platform-dashboard:ci'
     }
@@ -80,6 +88,79 @@ pipeline {
             }
         }
 
+        stage('Runtime smoke tests without pip') {
+            steps {
+                sh '''#!/usr/bin/env bash
+                    set -euo pipefail
+                    smoke_failed=0
+
+                    if docker run --rm --entrypoint python "$BACKEND_LOCAL_IMAGE" -c '
+import importlib.util
+import subprocess
+import time
+import urllib.request
+
+assert importlib.util.find_spec("pip") is None
+process = subprocess.Popen(["python", "/app/backend_entrypoint.py", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "18000"])
+try:
+    for _ in range(60):
+        if process.poll() is not None:
+            raise RuntimeError("backend exited before becoming live")
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:18000/livez", timeout=1) as response:
+                if response.status == 200:
+                    break
+        except Exception:
+            time.sleep(0.5)
+    else:
+        raise RuntimeError("backend /livez did not return HTTP 200")
+finally:
+    if process.poll() is None:
+        process.terminate()
+    process.wait(timeout=10)
+'; then
+                        echo 'Backend started and passed /livez without pip.'
+                    else
+                        echo 'Backend runtime smoke test failed.' >&2
+                        smoke_failed=1
+                    fi
+
+                    if docker run --rm --entrypoint python "$DASHBOARD_LOCAL_IMAGE" -c '
+import importlib.util
+import subprocess
+import time
+import urllib.request
+
+assert importlib.util.find_spec("pip") is None
+process = subprocess.Popen(["streamlit", "run", "application/dashboard.py", "--server.address=127.0.0.1", "--server.port=18501", "--server.headless=true"])
+try:
+    for _ in range(60):
+        if process.poll() is not None:
+            raise RuntimeError("dashboard exited before becoming healthy")
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:18501/_stcore/health", timeout=1) as response:
+                if response.status == 200:
+                    break
+        except Exception:
+            time.sleep(0.5)
+    else:
+        raise RuntimeError("dashboard health endpoint did not return HTTP 200")
+finally:
+    if process.poll() is None:
+        process.terminate()
+    process.wait(timeout=10)
+'; then
+                        echo 'Dashboard started and passed /_stcore/health without pip.'
+                    else
+                        echo 'Dashboard runtime smoke test failed.' >&2
+                        smoke_failed=1
+                    fi
+
+                    exit "$smoke_failed"
+                '''
+            }
+        }
+
         stage('Scan container images') {
             steps {
                 sh '''#!/usr/bin/env bash
@@ -106,6 +187,9 @@ pipeline {
         }
 
         stage('Push immutable Docker Hub images') {
+            when {
+                expression { params.PUSH_IMAGES }
+            }
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-token',
