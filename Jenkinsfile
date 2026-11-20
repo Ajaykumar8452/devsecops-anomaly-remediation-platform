@@ -42,10 +42,12 @@ pipeline {
                 sh '''#!/usr/bin/env bash
                     set -euo pipefail
                     docker run --rm \
+                      --user "$(id -u):$(id -g)" \
+                      -e PYTHONDONTWRITEBYTECODE=1 \
                       -v "$WORKSPACE:/workspace" \
                       -w /workspace \
                       python:3.13-slim \
-                      sh -ec 'python -m pip install --no-cache-dir -r requirements.txt pytest && python -m pytest -q'
+                      sh -ec 'python -m pip install --no-cache-dir --target /tmp/ci-deps -r requirements.txt pytest && PYTHONPATH=/tmp/ci-deps python -m pytest -q -p no:cacheprovider'
                 '''
             }
         }
