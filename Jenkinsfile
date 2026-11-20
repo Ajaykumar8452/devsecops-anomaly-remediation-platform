@@ -193,7 +193,7 @@ finally:
             }
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-token',
+                    credentialsId: 'Docker',
                     usernameVariable: 'DOCKERHUB_USER',
                     passwordVariable: 'DOCKERHUB_TOKEN'
                 )]) {
