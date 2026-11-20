@@ -70,13 +70,13 @@ pipeline {
 
         stage('Build backend image') {
             steps {
-                sh 'docker build --file Dockerfile --tag "$BACKEND_LOCAL_IMAGE" .'
+                sh 'docker build --pull --no-cache --file Dockerfile --tag "$BACKEND_LOCAL_IMAGE" .'
             }
         }
 
         stage('Build dashboard image') {
             steps {
-                sh 'docker build --file Dockerfile.dashboard --tag "$DASHBOARD_LOCAL_IMAGE" .'
+                sh 'docker build --pull --no-cache --file Dockerfile.dashboard --tag "$DASHBOARD_LOCAL_IMAGE" .'
             }
         }
 
@@ -84,16 +84,23 @@ pipeline {
             steps {
                 sh '''#!/usr/bin/env bash
                     set -euo pipefail
+                    scan_failed=0
                     for image in "$BACKEND_LOCAL_IMAGE" "$DASHBOARD_LOCAL_IMAGE"; do
-                      docker run --rm \
+                      if docker run --rm \
                         -v /var/run/docker.sock:/var/run/docker.sock \
                         -v jenkins-trivy-cache:/root/.cache/ \
                         "$TRIVY_IMAGE" image \
                         --scanners vuln,secret,misconfig \
                         --severity HIGH,CRITICAL \
                         --exit-code 1 \
-                        "$image"
+                        "$image"; then
+                        echo "Trivy scan passed for $image"
+                      else
+                        echo "Trivy scan failed for $image" >&2
+                        scan_failed=1
+                      fi
                     done
+                    exit "$scan_failed"
                 '''
             }
         }

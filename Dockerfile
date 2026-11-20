@@ -7,6 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --home-dir /app --shell /usr/sbin/nologin app \
     && mkdir -p /app/data \
@@ -14,6 +18,17 @@ RUN groupadd --system --gid 10001 app \
 
 COPY requirements-backend.txt ./requirements.txt
 RUN python -m pip install --no-cache-dir -r requirements.txt
+RUN set -eu; \
+    for spec in 'msgpack>=1.2.3' 'setuptools>=78.1.1' 'urllib3>=2.8.0'; do \
+      package="${spec%%[<>=]*}"; \
+      if python -c 'import importlib.metadata, sys; importlib.metadata.distribution(sys.argv[1])' "$package" >/dev/null 2>&1; then \
+        python -m pip install --no-cache-dir --upgrade "$spec"; \
+      else \
+        echo "Skipping $package: not installed in the backend dependency set."; \
+      fi; \
+    done; \
+    python -m pip check; \
+    python -m pip show msgpack setuptools urllib3 || true
 
 COPY --chown=app:app main.py ./main.py
 COPY --chown=app:app core/ ./core/
