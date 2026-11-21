@@ -1,0 +1,11 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dashboard
+  namespace: platform
+spec:
+  template:
+    spec:
+      containers:
+        - name: dashboard
+          image: ajaykumar8452/devsecops-platform:dashboard-bae2169bddf41426e2de7ea21ad8075bec4cb7dd

@@ -1,0 +1,26 @@
+# Optional: this resource is intentionally excluded from the default Kustomize build.
+# Replace the hostname, TLS Secret, and allowlist CIDR before applying it.
+apiVersion: networking.k3s.io/v1
+kind: Ingress
+metadata:
+  name: grafana
+  namespace: monitoring
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: monitoring-grafana-admin-allowlist@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - grafana.example.invalid
+      secretName: grafana-tls
+  rules:
+    - host: grafana.example.invalid
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  name: http

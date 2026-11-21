@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-settings
+  namespace: platform
+  labels:
+    app.kubernetes.io/name: dashboard
+    app.kubernetes.io/part-of: data-processing-platform
+data:
+  ANOMALY_DASHBOARD_API_URL: http://backend.platform.svc.cluster.local:8000
+  # Browser-facing URL for the initial SSH tunnel test; replace for a later DNS/TLS ingress.
+  GRAFANA_BASE_URL: http://localhost:3000
+  # Internal service URL used by the Streamlit server for Grafana health checks.
+  GRAFANA_INTERNAL_URL: http://grafana.monitoring.svc.cluster.local:3000

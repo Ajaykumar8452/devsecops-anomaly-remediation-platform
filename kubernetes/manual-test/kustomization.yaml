@@ -1,0 +1,53 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../namespaces/platform.yaml
+  - ../namespaces/monitoring.yaml
+  - ../application
+  - ../monitoring
+
+configMapGenerator:
+  - name: prometheus-config
+    namespace: monitoring
+    files:
+      - ../monitoring/prometheus/prometheus.yml
+    options:
+      disableNameSuffixHash: true
+  - name: grafana-datasource-provisioning
+    namespace: monitoring
+    files:
+      - ../monitoring/grafana/datasource.yml
+    options:
+      disableNameSuffixHash: true
+  - name: grafana-dashboard-provisioning
+    namespace: monitoring
+    files:
+      - ../../monitoring/grafana/provisioning/dashboards/platform.yml
+    options:
+      disableNameSuffixHash: true
+  - name: grafana-dashboards
+    namespace: monitoring
+    files:
+      - ../../monitoring/grafana/dashboards/application-overview.json
+      - ../../monitoring/grafana/dashboards/http-performance.json
+      - ../../monitoring/grafana/dashboards/anomaly-monitoring.json
+      - ../../monitoring/grafana/dashboards/job-analytics.json
+    options:
+      disableNameSuffixHash: true
+
+patches:
+  - path: backend-image-patch.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: backend
+      namespace: platform
+  - path: dashboard-image-patch.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: dashboard
+      namespace: platform

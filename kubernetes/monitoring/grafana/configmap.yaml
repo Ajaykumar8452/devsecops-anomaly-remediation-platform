@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-settings
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: data-processing-platform
+data:
+  GF_SERVER_ROOT_URL: http://localhost:3000/
+  GF_USERS_ALLOW_SIGN_UP: "false"
+  GF_AUTH_ANONYMOUS_ENABLED: "false"

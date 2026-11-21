@@ -1,0 +1,24 @@
+apiVersion: networking.k3s.io/v1
+kind: Ingress
+metadata:
+  name: dashboard
+  namespace: platform
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: platform-dashboard-admin-allowlist@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - dashboard.example.invalid
+      secretName: dashboard-tls
+  rules:
+    - host: dashboard.example.invalid
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dashboard
+                port:
+                  name: http
